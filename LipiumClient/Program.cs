@@ -1,4 +1,5 @@
-﻿using System;
+﻿using LipiumClient.Models;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Net;
@@ -71,15 +72,26 @@ namespace LipiumClient
 
                 if (req.Url.AbsolutePath == "/transaction")
                 {
-                    Console.WriteLine("Requete receive");
-                    string idExp = req.QueryString["idexp"];
-                    string idRcv = req.QueryString["idrcv"];
-                    string montant = req.QueryString["montant"];    // Doit devenir un int
+                    Transaction transaction = new Transaction(req);
+                    byte[] data;
+                    if (transaction.isNullOrEmpty())
+                    {
+                        data = Encoding.UTF8.GetBytes("Error, there is a missing parameter");
+                    }
+                    else
+                    {
+                        data = Encoding.UTF8.GetBytes("All good, transaction received. \n idExp is " + transaction.IdExp + "\n idRcv is " + transaction.IdRcv + "\n montant " + transaction.Montant);
+                        string jsonTransaction = Transaction.getJson(transaction);
+                        
+                        string sha256Transaction = "";  // faire un sha256 à partir du json de transaction
 
-                    //HttpClient client = new HttpClient();
+                        HttpClient httpClient = new HttpClient();
+                        HttpResponseMessage httpResponseMessage = await httpClient.GetAsync(new Uri($"http://25.29.51.211:8000/mine?idTrans={jsonTransaction}&oTrans=azerty"));
+                        var result = await httpResponseMessage.Content.ReadAsStringAsync();
+                        data = Encoding.UTF8.GetBytes(result);
+                    }
 
                     // Write the response info
-                    byte[] data = Encoding.UTF8.GetBytes("All good, transaction received. \nidExp is " + idExp + "\nidRcv is " + idRcv + "\nmontant ");
                     resp.ContentType = "text/html";
                     resp.ContentEncoding = Encoding.UTF8;
                     resp.ContentLength64 = data.LongLength;
