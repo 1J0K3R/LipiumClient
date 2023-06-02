@@ -8,7 +8,7 @@ namespace LipiumClient.Models
     {
         public string IdExp { get; private set; }
         public string IdRcv { get; private set; }
-        public string Montant { get; private set; }
+        public decimal Montant { get; private set; }
 
         public Transaction(HttpListenerRequest req)
         {
@@ -16,25 +16,27 @@ namespace LipiumClient.Models
 
             IdExp = req.QueryString["idexp"];
             IdRcv = req.QueryString["idrcv"];
-            Montant = req.QueryString["montant"];
+            decimal conteneur;
+            decimal.TryParse(req.QueryString["montant"], out conteneur);
+            Montant = conteneur;
         }
 
-        public bool isNullOrEmpty()
+        public bool isNullEmptyOr0()
         {
-            bool isNullOrEmpty = false;
+            bool isNullEmptyOr0 = false;
             string response = string.Empty;
-            if (string.IsNullOrEmpty(IdExp) || string.IsNullOrEmpty(IdRcv) || string.IsNullOrEmpty(Montant))
+            if (string.IsNullOrEmpty(IdExp) || string.IsNullOrEmpty(IdRcv) || Montant == 0 )
             {
-                isNullOrEmpty = true;
+                isNullEmptyOr0 = true;
             }
 
-            return isNullOrEmpty;
+            return isNullEmptyOr0;
         }
 
         public static string getJson(Transaction transaction)
         {
             // exemple de réponse : {"IdExp":"a1","IdRcv":"b2","Montant":"9"}
-            string jsonResult = "{\"IdExp\" \"" + transaction.IdExp + "\" ,\"IdRcv\":\"" + transaction.IdRcv + "\",\"Montant\":\"" + transaction.Montant + "\"}";
+            string jsonResult = "{\"IdExp\" :\"" + transaction.IdExp + "\" ,\"IdRcv\":\"" + transaction.IdRcv + "\",\"Montant\":\"" + transaction.Montant + "\"}";
             return jsonResult;
         }
     }

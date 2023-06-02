@@ -4,6 +4,7 @@ using System.Collections.Generic;
 using System.Linq;
 using System.Net;
 using System.Net.Http;
+using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -74,19 +75,34 @@ namespace LipiumClient
                 {
                     Transaction transaction = new Transaction(req);
                     byte[] data;
-                    if (transaction.isNullOrEmpty())
+                    if (transaction.isNullEmptyOr0())
                     {
+                        // Réponse retourner en cas d'erreur
                         data = Encoding.UTF8.GetBytes("Error, there is a missing parameter");
                     }
                     else
                     {
+                        // Réponse retourner en cas de succès
                         data = Encoding.UTF8.GetBytes("All good, transaction received. \n idExp is " + transaction.IdExp + "\n idRcv is " + transaction.IdRcv + "\n montant " + transaction.Montant);
                         string jsonTransaction = Transaction.getJson(transaction);
-                        
-                        string sha256Transaction = "";  // faire un sha256 à partir du json de transaction
 
+                        string hashTransaction = "";// cryptographie;  // faire un sha256 à partir du json de transaction
+                        Console.WriteLine(jsonTransaction);
+                        using (SHA256 sha256Hash = SHA256.Create())
+                        {
+                            // ComputeHash - returns byte array  
+                            byte[] bytes = sha256Hash.ComputeHash(Encoding.UTF8.GetBytes(jsonTransaction));
+
+                            // Convert byte array to a string   
+                            StringBuilder builder = new StringBuilder();
+                            for (int i = 0; i < bytes.Length; i++)
+                            {
+                                builder.Append(bytes[i].ToString("x2"));
+                            }
+                            hashTransaction = builder.ToString();
+                        }
                         HttpClient httpClient = new HttpClient();
-                        HttpResponseMessage httpResponseMessage = await httpClient.GetAsync(new Uri($"http://25.29.51.211:8000/mine?idTrans={jsonTransaction}&oTrans=azerty"));
+                        HttpResponseMessage httpResponseMessage = await httpClient.GetAsync(new Uri($"http://25.29.51.211:8000/mine?idTrans={hashTransaction}&oTrans={jsonTransaction}qqqqqqq"));
                         var result = await httpResponseMessage.Content.ReadAsStringAsync();
                         data = Encoding.UTF8.GetBytes(result);
                     }
