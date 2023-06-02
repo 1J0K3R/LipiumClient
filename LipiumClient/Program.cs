@@ -6,6 +6,7 @@ using System.Net;
 using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using System.Threading.Tasks;
 
 namespace LipiumClient
@@ -33,15 +34,6 @@ namespace LipiumClient
             "  </body>" +
             "</html>";
 
-        // http://...:8000/transaction?idexp=..&idrcv=..&montant=0-9
-        //Ex : http://25.32.62.103:8000/transaction?idexp='a1'&idrcv='b2'&montant=9
-
-        // input : montant = montant
-        //         idExpediteur = idexp
-        //         idReceveur = idrcv
-
-        // génération : idTransaction
-
         public static async Task HandleIncomingConnections()
         {
             bool runServer = true;
@@ -64,63 +56,82 @@ namespace LipiumClient
                 Console.WriteLine(req.UserAgent);
                 Console.WriteLine();
 
-                // If `shutdown` url requested w/ POST, then shutdown the server after serving the page
+                byte[] data = Encoding.UTF8.GetBytes("Nothing");
+
+                
                 if ((req.HttpMethod == "POST") && (req.Url.AbsolutePath == "/shutdown"))
                 {
+                    // reception d'une requete "/shutdown"
                     Console.WriteLine("Shutdown requested");
                     runServer = false;
                 }
-
-                if (req.Url.AbsolutePath == "/transaction")
+                else if (req.Url.AbsolutePath == "/soldeAccount")
                 {
+                    // reception d'une requete "/soldeAccount"
+                    string idAccount = req.QueryString["idaccount"];
+                    if(string.IsNullOrEmpty(idAccount))
+                    {
+                        data = Encoding.UTF8.GetBytes("Error, there is a missing parameter or bad parameter.");
+                    }
+                    HttpClient httpClient = new HttpClient();
+                    HttpResponseMessage httpResponseMessage = await httpClient.GetAsync(new Uri("http://25.28.20.82:8000/lastblock?blockId=1&blockNb=1&blockInfo=Lipum")); //http://25.28.20.82:8000/lastblock
+                    var result = await httpResponseMessage.Content.ReadAsStringAsync();
+                    Root root = JsonSerializer.Deserialize<Root>(result);
+
+                    decimal solde = 0;
+                    // Calcul le solde global d'un compte (à partir de son id)
+                    foreach(var block in root.Blocks)
+                    {
+                        foreach(var transaction in block.Transactions)
+                        {
+                            // je test que le compte ne soit pas l'id recepteur et l'id expediteur
+                            if(!(transaction.IdRcv == idAccount & transaction.IdExp == idAccount))
+                            {
+                                // si le compte est l'id receveur alors j'ajoute le montant à son solde
+                                if (transaction.IdRcv == idAccount)
+                                {
+                                    solde += transaction.Montant;
+                                }
+
+                                // si le compte est l'id expediteur alors je soustrais le montant à son solde
+                                if (transaction.IdExp == idAccount)
+                                {
+                                    solde -= transaction.Montant;
+                                }
+                            }                            
+                        }
+                    }
+                    data = Encoding.UTF8.GetBytes($"Votre solde total est de : {solde}");
+                }
+                else if (req.Url.AbsolutePath == "/transaction")
+                {
+                    // reception d'une requete "/transaction"
                     Transaction transaction = new Transaction(req);
-                    byte[] data;
                     if (transaction.isNullEmptyOr0())
                     {
                         // Réponse retourner en cas d'erreur
-                        data = Encoding.UTF8.GetBytes("Error, there is a missing parameter");
+                        data = Encoding.UTF8.GetBytes("Error, there is a missing parameter or bad parameter.");
                     }
                     else
                     {
                         // Réponse retourner en cas de succès
                         data = Encoding.UTF8.GetBytes("All good, transaction received. \n idExp is " + transaction.IdExp + "\n idRcv is " + transaction.IdRcv + "\n montant " + transaction.Montant);
+                        
                         string jsonTransaction = Transaction.getJson(transaction);
+                        string hashTransaction = Transaction.getHash(jsonTransaction);
 
-                        string hashTransaction = "";// cryptographie;  // faire un sha256 à partir du json de transaction
-                        Console.WriteLine(jsonTransaction);
-                        using (SHA256 sha256Hash = SHA256.Create())
-                        {
-                            // ComputeHash - returns byte array  
-                            byte[] bytes = sha256Hash.ComputeHash(Encoding.UTF8.GetBytes(jsonTransaction));
-
-                            // Convert byte array to a string   
-                            StringBuilder builder = new StringBuilder();
-                            for (int i = 0; i < bytes.Length; i++)
-                            {
-                                builder.Append(bytes[i].ToString("x2"));
-                            }
-                            hashTransaction = builder.ToString();
-                        }
-                        HttpClient httpClient = new HttpClient();
-                        HttpResponseMessage httpResponseMessage = await httpClient.GetAsync(new Uri($"http://25.29.51.211:8000/mine?idTrans={hashTransaction}&oTrans={jsonTransaction}qqqqqqq"));
+                        HttpClient httpClient = new HttpClient();                        
+                        HttpResponseMessage httpResponseMessage = await httpClient.GetAsync(new Uri($"http://25.29.51.211:8000/mine?idTrans={hashTransaction}&oTrans={jsonTransaction}"));
                         var result = await httpResponseMessage.Content.ReadAsStringAsync();
                         data = Encoding.UTF8.GetBytes(result);
                     }
-
-                    // Write the response info
-                    resp.ContentType = "text/html";
-                    resp.ContentEncoding = Encoding.UTF8;
-                    resp.ContentLength64 = data.LongLength;
-
-                    // Write out to the response stream (asynchronously), then close it
-                    await resp.OutputStream.WriteAsync(data, 0, data.Length);
-                    resp.Close();
                 }
                 else
                 {
                     // Write the response info
                     string disableSubmit = !runServer ? "disabled" : "";
-                    byte[] data = Encoding.UTF8.GetBytes(String.Format(pageData, "", "", "", disableSubmit));
+                    data = Encoding.UTF8.GetBytes(String.Format(pageData, "", "", "", disableSubmit));
+                }
                     resp.ContentType = "text/html";
                     resp.ContentEncoding = Encoding.UTF8;
                     resp.ContentLength64 = data.LongLength;
@@ -128,7 +139,6 @@ namespace LipiumClient
                     // Write out to the response stream (asynchronously), then close it
                     await resp.OutputStream.WriteAsync(data, 0, data.Length);
                     resp.Close();
-                }
             }
         }
 
